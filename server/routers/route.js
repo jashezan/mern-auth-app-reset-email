@@ -7,10 +7,14 @@ import {
   getUser,
   login,
   register,
+  resetPassword,
   updateUser,
   verifyOTP,
   verifyToken,
+  verifyUser,
 } from "../controllers/appController.js";
+
+import Auth, { localVariable } from "../middlewares/auth.js";
 
 const router = Router();
 
@@ -20,20 +24,18 @@ router.route("/login").post(verifyToken, login);
 router.route("/registermail").post((req, res) => {
   return res.json("register mail");
 });
-router.route("/auth").post((req, res) => {
-  return res.json("auth");
+router.route("/auth").post(verifyUser, (req, res) => {
+  return res.end();
 });
 
 // GET Method
 router.route("/user/:username").get(getUser);
-router.route("/generateOTP").get(generateOTP);
+router.route("/generateOTP").get(localVariable, generateOTP);
 router.route("/verifyOTP").get(verifyOTP);
 router.route("/createResetSession").get(createResetSession);
 
 // PUT Method
-router.route("/updateuser").put(updateUser);
-router.route("/resetPassword").put((req, res) => {
-  return res.json();
-});
+router.route("/updateuser").put(Auth, updateUser);
+router.route("/resetPassword").put(verifyUser, resetPassword);
 
 export default router; // export router to use in server.js
