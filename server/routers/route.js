@@ -13,7 +13,7 @@ import {
   verifyToken,
   verifyUser,
 } from "../controllers/appController.js";
-
+import { registerMail } from "../controllers/mailer.js"
 import Auth, { localVariable } from "../middlewares/auth.js";
 
 const router = Router();
@@ -21,9 +21,7 @@ const router = Router();
 // POST Method
 router.route("/register").post(register);
 router.route("/login").post(verifyToken, login);
-router.route("/registermail").post((req, res) => {
-  return res.json("register mail");
-});
+router.route("/registermail").post(registerMail);
 router.route("/auth").post(verifyUser, (req, res) => {
   return res.end();
 });
