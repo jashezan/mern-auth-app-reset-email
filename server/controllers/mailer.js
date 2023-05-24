@@ -1,71 +1,64 @@
-import nodemailer from "nodemailer";
-import MailGen from "mailgen";
-import dotenv from "dotenv";
-dotenv.config();
+import nodemailer from 'nodemailer';
+import Mailgen from 'mailgen';
 
-const EMAIL_ADDRESS = process.env.EMAIL_ADDRESS;
-const EMAIL_PASSWORD = process.env.EMAIL_PASSWORD;
+import ENV from '../config.js';
 
-const nodeConfig = {
-  host: "smtp.ethereal.email",
-  port: 587,
-  secure: false, // true for 465, false for other ports
-  auth: {
-    user: EMAIL_ADDRESS, // generated ethereal user
-    pass: EMAIL_PASSWORD, // generated ethereal password
-  },
-};
 
-const transporter = nodemailer.createTransport(nodeConfig);
-
-let MailGenerator = new MailGen({
-  theme: "default",
-  product: {
-    name: "NodeMailer",
-    link: "https://mailgen.js/",
-  },
-});
-
-// POST http://localhost:8000/api/registerMail
-/**
- * 
- * @param: {
-  "username": "example123",
-  "usermail": "",
-  "text": "Welcome to NodeMailer! We're very excited to have you on board.",
-  "subject": "Welcome to NodeMailer"
+// https://ethereal.email/create
+let nodeConfig = {
+    host: "smtp.ethereal.email",
+    port: 587,
+    secure: false, // true for 465, false for other ports
+    auth: {
+        user: ENV.EMAIL, // generated ethereal user
+        pass: ENV.PASSWORD, // generated ethereal password
+    }
 }
- */
+
+let transporter = nodemailer.createTransport(nodeConfig);
+
+let MailGenerator = new Mailgen({
+    theme: "default",
+    product : {
+        name: "Mailgen",
+        link: 'https://mailgen.js/'
+    }
+})
+
+/** POST: http://localhost:8080/api/registerMail 
+ * @param: {
+  "username" : "example123",
+  "userEmail" : "admin123",
+  "text" : "",
+  "subject" : "",
+}
+*/
 export const registerMail = async (req, res) => {
-  const { username, usermail, text, subject } = req.body;
+    const { username, userEmail, text, subject } = req.body;
 
-  // body of the email
-  let email = {
-    body: {
-      name: username,
-      intro:
-        text ||
-        "Welcome to NodeMailer! We're very excited to have you on board.",
-      outro:
-        "Need help, or have questions? Just reply to this email, we'd love to help.",
-    },
-  };
+    // body of the email
+    var email = {
+        body : {
+            name: username,
+            intro : text || 'Welcome to Daily Tuition! We\'re very excited to have you on board.',
+            outro: 'Need help, or have questions? Just reply to this email, we\'d love to help.'
+        }
+    }
 
-  let emailBody = MailGenerator.generate(email);
-  let message = {
-    from: EMAIL_ADDRESS,
-    to: usermail,
-    subject: subject || "Welcome to NodeMailer",
-    html: emailBody,
-  };
+    var emailBody = MailGenerator.generate(email);
 
-  // send mail
-  transporter
-    .sendMail(message)
-    .then((info) => {
-      return res.status(200).json({ message: "Email sent successfully", info });
-    })
-    .catch((err) => {
-      return res.status(500).json({ message: err.message });
-    });
-};
+    let message = {
+        from : ENV.EMAIL,
+        to: userEmail,
+        subject : subject || "Signup Successful",
+        html : emailBody
+    }
+
+    // send mail
+    transporter.sendMail(message)
+        .then(() => {
+            return res.status(200).send({ msg: "You should receive an email from us."})
+        })
+        .catch(error => res.status(500).send({ error }))
+
+}

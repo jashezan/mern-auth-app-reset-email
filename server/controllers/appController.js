@@ -1,28 +1,27 @@
-import mongoose from "mongoose";
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
-import otpGenerator from "otp-generator";
+import UserModel from '../model/User.model.js'
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import ENV from '../config.js'
+import otpGenerator from 'otp-generator';
 
-import User from "../models/User.model.js";
-import { invalidEmail } from "../validators/invalidEmail.js";
-dotenv.config();
+/** middleware for verify user */
+export async function verifyUser(req, res, next){
+    try {
+        
+        const { username } = req.method == "GET" ? req.query : req.body;
 
-// verify User
-export async function verifyUser(req, res, next) {
-  try {
-    const { username } = req.method == "GET" ? req.query : req.body;
+        // check the user existance
+        let exist = await UserModel.findOne({ username });
+        if(!exist) return res.status(404).send({ error : "Can't find User!"});
+        next();
 
-    // check the user existance
-    let exist = await User.findOne({ username });
-    if (!exist) return res.status(404).send({ error: "Can't find User!" });
-    next();
-  } catch (error) {
-    return res.status(404).send({ error: "Authentication Error" });
-  }
+    } catch (error) {
+        return res.status(404).send({ error: "Authentication Error"});
+    }
 }
 
-/** POST: http://localhost:8000/api/register 
+
+/** POST: http://localhost:8080/api/register 
  * @param : {
   "username" : "example123",
   "password" : "admin123",
@@ -34,111 +33,142 @@ export async function verifyUser(req, res, next) {
   "profile": ""
 }
 */
-export const register = async (req, res) => {
-  const {
-    username,
-    password,
-    email,
-    firstName,
-    lastName,
-    mobile,
-    address,
-    profile,
-  } = req.body;
-  try {
-    if (!username || !password || !email) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-    if (!invalidEmail(email)) {
-      return res.status(400).json({ message: "Invalid email" });
-    }
-    const nameExists = await User.findOne({ username });
-    if (nameExists) {
-      return res.status(400).json({ message: "Username already exists" });
-    }
-    const emailExists = await User.findOne({ email });
-    if (emailExists) {
-      return res.status(400).json({ message: "Email already exists" });
-    }
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-    const newUser = new User({
-      username,
-      email,
-      password: hashedPassword,
-      firstName: firstName || "",
-      lastName: lastName || "",
-      mobile: mobile || 0,
-      address: address || "",
-      profile: profile || "",
-    });
-    const savedUser = await newUser.save();
-    return res.status(201).json(savedUser);
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-}; // register user
+export async function register(req,res){
 
-/** POST: http://localhost:8000/api/login 
+    try {
+        const { username, password, profile, email } = req.body;        
+
+        // check the existing user
+        const existUsername = new Promise((resolve, reject) => {
+            UserModel.findOne({ username }, function(err, user){
+                if(err) reject(new Error(err))
+                if(user) reject({ error : "Please use unique username"});
+
+                resolve();
+            })
+        });
+
+        // check for existing email
+        const existEmail = new Promise((resolve, reject) => {
+            UserModel.findOne({ email }, function(err, email){
+                if(err) reject(new Error(err))
+                if(email) reject({ error : "Please use unique Email"});
+
+                resolve();
+            })
+        });
+
+
+        Promise.all([existUsername, existEmail])
+            .then(() => {
+                if(password){
+                    bcrypt.hash(password, 10)
+                        .then( hashedPassword => {
+                            
+                            const user = new UserModel({
+                                username,
+                                password: hashedPassword,
+                                profile: profile || '',
+                                email
+                            });
+
+                            // return save result as a response
+                            user.save()
+                                .then(result => res.status(201).send({ msg: "User Register Successfully"}))
+                                .catch(error => res.status(500).send({error}))
+
+                        }).catch(error => {
+                            return res.status(500).send({
+                                error : "Enable to hashed password"
+                            })
+                        })
+                }
+            }).catch(error => {
+                return res.status(500).send({ error })
+            })
+
+
+    } catch (error) {
+        return res.status(500).send(error);
+    }
+
+}
+
+
+/** POST: http://localhost:8080/api/login 
  * @param: {
   "username" : "example123",
   "password" : "admin123"
 }
 */
-export const login = async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    const USER = await User.findOne({ username });
-    if (!USER) {
-      return res.status(400).json({ message: "Invalid username" });
-    } else {
-      bcrypt.compare(password, USER.password, (err, result) => {
-        if (err) {
-          return res.status(400).json({ message: "Invalid password" });
-        }
-        if (result) {
-          // create jwtoken
-          const token = jwt.sign(
-            { _id: USER._id, username: USER.username },
-            process.env.JWT_SECRET,
-            { expiresIn: "24h" }
-          );
-          return res.status(200).json({
-            message: "Login successful",
-            username: USER.username,
-            token: token,
-          });
-        } else {
-          return res.status(400).json({ message: "Invalid password" });
-        }
-      });
-    }
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-}; // login user
+export async function login(req,res){
+   
+    const { username, password } = req.body;
 
-/** GET: http://localhost:8000/api/user/example123 */
-export const getUser = async (req, res) => {
-  const { username } = req.params;
-  console.log(username);
-  try {
-    if (!username) {
-      return res.status(400).json({ message: "Invalid username" });
-    }
-    const USER = await User.findOne({ username });
-    if (!USER) {
-      return res.status(400).json({ message: "Invalid username" });
-    } else {
-      const { password, ...others } = USER._doc;
-      return res.status(200).json(others);
-    }
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-}; // get user by username
+    try {
+        
+        UserModel.findOne({ username })
+            .then(user => {
+                bcrypt.compare(password, user.password)
+                    .then(passwordCheck => {
 
-/** PUT: http://localhost:8000/api/updateuser 
+                        if(!passwordCheck) return res.status(400).send({ error: "Don't have Password"});
+
+                        // create jwt token
+                        const token = jwt.sign({
+                                        userId: user._id,
+                                        username : user.username
+                                    }, ENV.JWT_SECRET , { expiresIn : "24h"});
+
+                        return res.status(200).send({
+                            msg: "Login Successful...!",
+                            username: user.username,
+                            token
+                        });                                    
+
+                    })
+                    .catch(error =>{
+                        return res.status(400).send({ error: "Password does not Match"})
+                    })
+            })
+            .catch( error => {
+                return res.status(404).send({ error : "Username not Found"});
+            })
+
+    } catch (error) {
+        return res.status(500).send({ error});
+    }
+}
+
+
+/** GET: http://localhost:8080/api/user/example123 */
+export async function getUser(req,res){
+    
+    const { username } = req.params;
+
+    try {
+        
+        if(!username) return res.status(501).send({ error: "Invalid Username"});
+
+        UserModel.findOne({ username }, function(err, user){
+            if(err) return res.status(500).send({ err });
+            if(!user) return res.status(501).send({ error : "Couldn't Find the User"});
+
+            /** remove password from user */
+            // mongoose return unnecessary data with object so convert it into json
+            const { password, ...rest } = Object.assign({}, user.toJSON());
+
+            return res.status(201).send(rest);
+        })
+
+    } catch (error) {
+        return res.status(404).send({ error : "Cannot Find User Data"});
+    }
+
+}
+
+
+/** PUT: http://localhost:8080/api/updateuser 
  * @param: {
   "header" : "<token>"
 }
@@ -148,105 +178,100 @@ body: {
     profile : ''
 }
 */
-export const updateUser = async (req, res) => {
-  // const {id} = req.query;
-  const { _id: id } = req.user;
-  const body = req.body;
-  console.log(id, body);
-  try {
-    if (id) {
-      if (!mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(404).json({ error: "Incorrect User ID" });
-      }
-      const response = await User.findOneAndUpdate(
-        { _id: id },
-        {
-          ...body,
+export async function updateUser(req,res){
+    try {
+        
+        // const id = req.query.id;
+        const { userId } = req.user;
+
+        if(userId){
+            const body = req.body;
+
+            // update the data
+            UserModel.updateOne({ _id : userId }, body, function(err, data){
+                if(err) throw err;
+
+                return res.status(201).send({ msg : "Record Updated...!"});
+            })
+
+        }else{
+            return res.status(401).send({ error : "User Not Found...!"});
         }
-      );
-      if (!response) {
-        return res.status(404).json({ error: "No such User" });
-      } else {
-        res.status(200).json(response);
-      }
-    } else {
-      return res.status(400).json({ message: "Invalid user id" });
+
+    } catch (error) {
+        return res.status(401).send({ error });
     }
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-}; // update user
+}
 
-/** GET: http://localhost:8000/api/generateOTP */
-export const generateOTP = async (req, res) => {
-  req.app.locals.OTP = await otpGenerator.generate(6, {
-    lowerCaseAlphabets: false,
-    upperCaseAlphabets: false,
-    specialChars: false,
-  });
-  return res.status(201).json({ code: req.app.locals.OTP });
-}; // generate OTP
 
-/** GET: http://localhost:8000/api/verifyOTP */
-export const verifyOTP = async (req, res) => {
-  const { code } = req.query;
-  if (parseInt(code) === parseInt(req.app.locals.OTP)) {
-    req.app.locals.OTP = null; // reset OTP to null after verification
-    req.app.locals.resetSession = true; // set reset session to true for reset password
-    return res.status(200).json({ message: "Verified Successfully" });
-  } else {
-    return res.status(400).json({ message: "Invalid OTP" });
-  }
-}; // verify OTP
+/** GET: http://localhost:8080/api/generateOTP */
+export async function generateOTP(req,res){
+    req.app.locals.OTP = await otpGenerator.generate(6, { lowerCaseAlphabets: false, upperCaseAlphabets: false, specialChars: false})
+    res.status(201).send({ code: req.app.locals.OTP })
+}
+
+
+/** GET: http://localhost:8080/api/verifyOTP */
+export async function verifyOTP(req,res){
+    const { code } = req.query;
+    if(parseInt(req.app.locals.OTP) === parseInt(code)){
+        req.app.locals.OTP = null; // reset the OTP value
+        req.app.locals.resetSession = true; // start session for reset password
+        return res.status(201).send({ msg: 'Verify Successsfully!'})
+    }
+    return res.status(400).send({ error: "Invalid OTP"});
+}
+
 
 // successfully redirect user when OTP is valid
-/** GET: http://localhost:8000/api/createResetSession */
-export const createResetSession = async (req, res) => {
-  if (req.app.locals.resetSession) {
-    req.app.locals.resetSession = false; // reset session to false after redirect and only once
-    return res.status(200).json({ message: "Reset session created" });
-  }
-  return res.status(440).json({ message: "Session Expired" });
-}; // create reset session
+/** GET: http://localhost:8080/api/createResetSession */
+export async function createResetSession(req,res){
+   if(req.app.locals.resetSession){
+        return res.status(201).send({ flag : req.app.locals.resetSession})
+   }
+   return res.status(440).send({error : "Session expired!"})
+}
+
 
 // update the password when we have valid session
-/** PUT: http://localhost:8000/api/resetPassword */
-export const resetPassword = async (req, res) => {
-  try {
-    if (!req.app.locals.resetSession)
-      return res.status(440).json({ message: "Session Expired" });
-    const { username, password } = req.body;
+/** PUT: http://localhost:8080/api/resetPassword */
+export async function resetPassword(req,res){
     try {
-      User.findOne({ username })
-        .then(async (user) => {
-          try {
-            const genSalt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(password, genSalt);
-            try {
-              const result = await User.updateOne(
-                { username: user.username },
-                { password: hashedPassword }
-              );
-              if (!result.matchedCount) {
-                throw new Error(`User with username ${username} not found`);
-              }
-              return res.status(200).json({ message: "Password Changed" });
-            } catch (err) {
-              throw err;
-            }
-          } catch (error) {
-            return res
-              .status(400)
-              .json({ message: "Unable to change password" });
-          }
-        })
-        .catch((err) => {
-          return res.status(400).json({ message: "Username Does Not Exists" });
-        });
+        
+        if(!req.app.locals.resetSession) return res.status(440).send({error : "Session expired!"});
+
+        const { username, password } = req.body;
+
+        try {
+            
+            UserModel.findOne({ username})
+                .then(user => {
+                    bcrypt.hash(password, 10)
+                        .then(hashedPassword => {
+                            UserModel.updateOne({ username : user.username },
+                            { password: hashedPassword}, function(err, data){
+                                if(err) throw err;
+                                req.app.locals.resetSession = false; // reset session
+                                return res.status(201).send({ msg : "Record Updated...!"})
+                            });
+                        })
+                        .catch( e => {
+                            return res.status(500).send({
+                                error : "Enable to hashed password"
+                            })
+                        })
+                })
+                .catch(error => {
+                    return res.status(404).send({ error : "Username not Found"});
+                })
+
+        } catch (error) {
+            return res.status(500).send({ error })
+        }
+
     } catch (error) {
-      return res.status(500).json({ message: error.message });
+        return res.status(401).send({ error })
     }
-  } catch (error) {
-    return res.status(400).json({ message: error.message });
-  }
-}; // reset password
+}
+
+
