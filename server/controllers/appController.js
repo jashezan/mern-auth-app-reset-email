@@ -22,22 +22,6 @@ export async function verifyUser(req, res, next) {
   }
 }
 
-// verify user token
-export const verifyToken = async (req, res, next) => {
-  try {
-    const { username } = req.query === "GET" ? req.query : req.body;
-
-    // check existing user
-    const USER = await User.findOne({ username });
-    if (!USER) {
-      return res.status(400).json({ message: "Invalid username" });
-    }
-    next();
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-};
-
 /** POST: http://localhost:8000/api/register 
  * @param : {
   "username" : "example123",

@@ -10,7 +10,6 @@ import {
   resetPassword,
   updateUser,
   verifyOTP,
-  verifyToken,
   verifyUser,
 } from "../controllers/appController.js";
 import { registerMail } from "../controllers/mailer.js"
@@ -20,7 +19,7 @@ const router = Router();
 
 // POST Method
 router.route("/register").post(register);
-router.route("/login").post(verifyToken, login);
+router.route("/login").post(verifyUser, login);
 router.route("/registermail").post(registerMail);
 router.route("/auth").post(verifyUser, (req, res) => {
   return res.end();
